@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AURUM — Gold Live Chart</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.1.3/lightweight-charts.standalone.production.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap');
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#0a0b0e;color:#e8ecf0;font-family:'Space Mono',monospace;overflow:hidden}
+
+#app{display:flex;flex-direction:column;width:100%;height:100%}
+#topbar{flex:0 0 50px;background:#0f1117;border-bottom:1px solid #1e2433;display:flex;align-items:center;padding:0 14px;gap:12px}
+#toolbar{flex:0 0 36px;background:#0f1117;border-bottom:1px solid #1e2433;display:flex;align-items:center;padding:0 10px;gap:2px}
+#main{flex:1 1 0;min-height:0;display:flex;overflow:hidden}
+#chartWrap{flex:1 1 0;min-width:0;min-height:0;position:relative;overflow:hidden}
+/* chartDiv: NO size CSS — LightweightCharts controls this element entirely */
+#overlayCanvas{position:absolute;top:0;left:0;pointer-events:none;z-index:4}
+#hoverBox{position:absolute;top:10px;left:10px;background:rgba(10,11,14,.95);border:1px solid #1e2433;border-radius:5px;padding:6px 10px;font-size:11px;display:none;z-index:5;pointer-events:none}
+#sidePanel{flex:0 0 278px;background:#0f1117;border-left:1px solid #1e2433;display:flex;flex-direction:column;min-height:0}
+#panelHead{flex:0 0 auto;padding:10px 13px;border-bottom:1px solid #1e2433;display:flex;align-items:center;justify-content:space-between}
+#panelBody{flex:1 1 0;min-height:0;overflow-y:auto;padding:8px}
+#panelBody::-webkit-scrollbar{width:3px}
+#panelBody::-webkit-scrollbar-thumb{background:#1e2433;border-radius:2px}
+#statusbar{flex:0 0 22px;background:#0f1117;border-top:1px solid #1e2433;display:flex;align-items:center;padding:0 12px;gap:14px;font-size:10px;color:#5a6475}
+
+/* MODAL */
+#modal{position:fixed;inset:0;background:rgba(5,6,9,.93);backdrop-filter:blur(8px);z-index:200;display:flex;align-items:center;justify-content:center}
+#modal.hide{display:none}
+.mcard{background:#0f1117;border:1px solid #1e2433;border-radius:10px;width:500px;max-width:94vw;padding:28px}
+.mlogo{font-family:'Syne',sans-serif;font-weight:800;font-size:22px;letter-spacing:5px;color:#f5c842;margin-bottom:2px}
+.msub{font-size:10px;color:#5a6475;letter-spacing:2px;margin-bottom:22px;text-transform:uppercase}
+.ptabs{display:flex;gap:6px;margin-bottom:14px}
+.ptab{flex:1;padding:9px 6px;border-radius:5px;border:1.5px solid #1e2433;background:transparent;color:#5a6475;font-family:'Space Mono',monospace;font-size:10px;cursor:pointer;transition:all .15s;text-align:center}
+.ptab:hover{color:#e8ecf0;border-color:#2d3347}
+.ptab.sel{color:#f5c842;border-color:#f5c842;background:rgba(245,200,66,.1)}
+.ptab b{display:block;font-size:11px;margin-bottom:2px}
+.pinfo{background:#161922;border:1px solid #1e2433;border-radius:5px;padding:12px;margin-bottom:14px;font-size:11px;line-height:1.8;color:#8892a0}
+.pinfo a{color:#4fc3f7;text-decoration:none}
+.pinfo a:hover{text-decoration:underline}
+.pinfo ul{list-style:none;padding:0;margin:6px 0 0}
+.pinfo li::before{content:'→ ';color:#f5c842}
+.pinfo b{color:#e8ecf0}
+.klbl{font-size:10px;color:#5a6475;letter-spacing:1px;display:block;margin-bottom:5px;text-transform:uppercase}
+#keyInput{width:100%;padding:10px 12px;background:#0a0b0e;border:1.5px solid #1e2433;border-radius:5px;color:#e8ecf0;font-family:'Space Mono',monospace;font-size:13px;outline:none;transition:border-color .2s;margin-bottom:14px}
+#keyInput:focus{border-color:#f5c842}
+#keyInput::placeholder{color:#5a6475}
+#merr{min-height:20px;font-size:11px;color:#ef5350;margin-bottom:8px;font-weight:700;line-height:1.5}
+.mbtns{display:flex;gap:8px}
+.mbp{flex:1;padding:11px;background:#f5c842;color:#0a0b0e;border:none;border-radius:5px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;transition:background .15s}
+.mbp:hover{background:#e8b830}
+.mbp:disabled{opacity:.45;cursor:not-allowed}
+.mbs{padding:11px 14px;background:transparent;color:#5a6475;border:1.5px solid #1e2433;border-radius:5px;font-family:'Space Mono',monospace;font-size:11px;cursor:pointer;transition:all .15s}
+.mbs:hover{color:#e8ecf0;border-color:#2d3347}
+.mnote{margin-top:10px;font-size:9px;color:#5a6475;text-align:center;line-height:1.5}
+#progWrap{height:3px;background:#1e2433;border-radius:2px;margin-bottom:14px;overflow:hidden;display:none}
+#progBar{height:100%;background:linear-gradient(90deg,#f5c842,#4fc3f7);border-radius:2px;width:0;transition:width .35s}
+
+/* TOPBAR */
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:17px;letter-spacing:4px;color:#f5c842;flex-shrink:0;cursor:pointer;line-height:1}
+.logo small{display:block;font-size:9px;color:#5a6475;font-weight:400;letter-spacing:2px;margin-top:1px}
+.vdiv{width:1px;height:26px;background:#1e2433;flex-shrink:0}
+.pair{font-family:'Syne',sans-serif;font-size:12px;color:#5a6475;letter-spacing:2px}
+#pnum{font-family:'Syne',sans-serif;font-weight:700;font-size:21px;color:#e8ecf0;letter-spacing:1px;transition:color .2s;min-width:90px}
+#pnum.up{color:#26a69a}#pnum.dn{color:#ef5350}
+#pchg{font-size:11px;padding:2px 6px;border-radius:3px}
+#pchg.up{color:#26a69a;background:rgba(38,166,154,.12)}
+#pchg.dn{color:#ef5350;background:rgba(239,83,80,.12)}
+.ohlc{display:flex;gap:10px;font-size:11px;color:#5a6475}
+.ohlc span{color:#e8ecf0;margin-left:2px}
+.flex1{flex:1}
+.pill{display:flex;align-items:center;gap:5px;font-size:10px;padding:3px 9px;border-radius:3px;border:1px solid #1e2433;cursor:pointer;transition:border-color .15s}
+.pill:hover{border-color:#f5c842}
+.dot{width:7px;height:7px;border-radius:50%}
+.dot.sim{background:#f5c842;animation:blink 1.8s infinite}
+.dot.live{background:#26a69a;animation:blink 1.8s infinite}
+.dot.err{background:#ef5350}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* TOOLBAR */
+.tfb{padding:3px 9px;background:transparent;border:none;color:#5a6475;font-family:'Space Mono',monospace;font-size:11px;cursor:pointer;border-radius:3px;transition:all .12s}
+.tfb:hover{color:#e8ecf0;background:#161922}
+.tfb.on{color:#f5c842;background:rgba(245,200,66,.1)}
+.tsep{width:1px;height:18px;background:#1e2433;margin:0 4px}
+.toolb{padding:3px 8px;background:transparent;border:1px solid transparent;color:#5a6475;font-family:'Space Mono',monospace;font-size:10px;cursor:pointer;border-radius:3px;transition:all .12s;white-space:nowrap}
+.toolb:hover{color:#e8ecf0;border-color:#1e2433}
+.toolb.on{color:#4fc3f7;border-color:rgba(79,195,247,.3);background:rgba(79,195,247,.07)}
+#rlbl{font-size:10px;color:#5a6475;margin-left:6px}
+
+/* PANEL */
+.ptitle{font-family:'Syne',sans-serif;font-size:11px;letter-spacing:3px;color:#4fc3f7}
+.psub{font-size:9px;color:#5a6475;margin-top:2px}
+.pbadge{padding:2px 7px;border-radius:8px;font-size:10px;font-weight:700}
+.pbadge.bull{background:rgba(38,166,154,.18);color:#26a69a}
+.pbadge.bear{background:rgba(239,83,80,.18);color:#ef5350}
+.tfsec{margin-bottom:10px;border:1px solid #1e2433;border-radius:5px;overflow:hidden}
+.tfhd{background:#161922;padding:6px 11px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}
+.tfhd:hover{background:#1a2030}
+.tflbl{font-family:'Syne',sans-serif;font-size:11px;color:#f5c842;font-weight:700}
+.tfbd{padding:8px 11px}
+.wpos{display:flex;align-items:center;gap:3px;padding:4px 0}
+.wstep{display:flex;flex-direction:column;align-items:center;gap:1px}
+.wcirc{width:17px;height:17px;border-radius:50%;border:1.5px solid #1e2433;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#5a6475;background:#0a0b0e}
+.wcirc.on{border-color:#f5c842;background:rgba(245,200,66,.1);color:#f5c842;box-shadow:0 0 6px rgba(245,200,66,.25)}
+.wcirc.done{border-color:#26a69a;background:rgba(38,166,154,.08);color:#26a69a}
+.wline{flex:1;height:1.5px;background:#1e2433}
+.wline.done{background:#26a69a}
+.wlb{font-size:7px;color:#5a6475}
+.accbox{margin:5px 0;padding:7px;background:#0a0b0e;border-radius:4px;border:1px solid #1e2433}
+.acct{font-size:9px;color:#5a6475;letter-spacing:1px;margin-bottom:4px;text-transform:uppercase}
+.accrow{display:flex;align-items:center;margin-bottom:3px;font-size:9px}
+.accl{color:#5a6475;flex:0 0 58px}
+.accbar{flex:1;height:3px;border-radius:2px;background:#1e2433;overflow:hidden;margin:0 5px}
+.accf{height:100%;border-radius:2px;transition:width .6s}
+.accv{color:#e8ecf0;font-weight:700;font-size:9px;min-width:26px;text-align:right}
+.sigbox{margin-top:6px;padding:6px 8px;border-radius:4px;font-size:10px;line-height:1.5}
+.sigbox.bull{background:rgba(38,166,154,.07);border:1px solid rgba(38,166,154,.22);color:#26a69a}
+.sigbox.bear{background:rgba(239,83,80,.07);border:1px solid rgba(239,83,80,.22);color:#ef5350}
+
+/* STATUS BAR */
+.si{display:flex;align-items:center;gap:4px}
+.sd{width:5px;height:5px;border-radius:50%}
+.sd.g{background:#26a69a}
+.sd.y{background:#f5c842;animation:blink 2s infinite}
+.sml{margin-left:auto}
+
+/* TOAST */
+#toast{position:fixed;bottom:34px;left:50%;transform:translateX(-50%);background:#161922;border:1px solid #2d3347;border-radius:5px;padding:8px 18px;font-size:11px;color:#e8ecf0;z-index:300;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+#toast.show{opacity:1}
+#toast.ok{border-color:rgba(38,166,154,.5);color:#26a69a}
+#toast.er{border-color:rgba(239,83,80,.5);color:#ef5350}
+</style>
+</head>
+<body>
+
+<!-- MODAL -->
+<div id="modal">
+ <div class="mcard">
+  <div class="mlogo">AURUM</div>
+  <div class="msub">Gold Terminal &middot; Data Source</div>
+  <div class="ptabs">
+   <button class="ptab sel" id="tab-td"  onclick="switchTab('td')"><b>Twelve Data</b><small>Free &middot; Full OHLCV</small></button>
+   <button class="ptab"     id="tab-ga"  onclick="switchTab('ga')"><b>GoldAPI.io</b><small>Free &middot; Spot price</small></button>
+   <button class="ptab"     id="tab-sim" onclick="switchTab('sim')"><b>Simulation</b><small>No key needed</small></button>
+  </div>
+  <div class="pinfo" id="pinfo">
+   <b>Twelve Data</b> &mdash; full OHLCV candlestick history + live XAU/USD price.
+   <ul>
+    <li>Go to <a href="https://twelvedata.com/register" target="_blank">twelvedata.com/register</a> &mdash; sign up free</li>
+    <li>Open your dashboard and copy the <b>API Key</b></li>
+    <li>Free tier: 800 credits/day &middot; up to 5,000 candles &middot; all timeframes</li>
+    <li>Chart polls live price every 10 seconds</li>
+   </ul>
+  </div>
+  <div id="progWrap"><div id="progBar"></div></div>
+  <div id="keyRow">
+   <label class="klbl">API KEY</label>
+   <input id="keyInput" type="password" autocomplete="off" placeholder="Paste your Twelve Data API key..." spellcheck="false" />
+  </div>
+  <div id="merr"></div>
+  <div class="mbtns">
+   <button class="mbs" onclick="useSim()">Use Simulation</button>
+   <button class="mbp" id="connBtn" onclick="connect()">Connect Live &rarr;</button>
+  </div>
+  <div class="mnote">Key is stored only in memory &mdash; never sent anywhere except the selected provider.</div>
+ </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="app">
+ <div id="topbar">
+  <div class="logo" onclick="document.getElementById('modal').classList.remove('hide')">AURUM<small>GOLD TERMINAL</small></div>
+  <div class="vdiv"></div>
+  <div class="pair">XAU/USD</div>
+  <div id="pnum">&#8212;</div>
+  <div id="pchg" class="up">+0.00%</div>
+  <div class="vdiv"></div>
+  <div class="ohlc">O<span id="oO">&#8212;</span> H<span id="oH">&#8212;</span> L<span id="oL">&#8212;</span> C<span id="oC">&#8212;</span></div>
+  <div class="flex1"></div>
+  <div class="pill" onclick="document.getElementById('modal').classList.remove('hide')">
+   <div class="dot sim" id="ldot"></div><span id="llbl" style="color:#5a6475;font-size:10px">SIMULATION</span>
+  </div>
+ </div>
+
+ <div id="toolbar">
+  <button class="tfb" data-tf="1min"  onclick="chTF(this)">1m</button>
+  <button class="tfb" data-tf="5min"  onclick="chTF(this)">5m</button>
+  <button class="tfb" data-tf="15min" onclick="chTF(this)">15m</button>
+  <button class="tfb" data-tf="30min" onclick="chTF(this)">30m</button>
+  <button class="tfb" data-tf="1h"    onclick="chTF(this)">1H</button>
+  <button class="tfb on" data-tf="4h" onclick="chTF(this)">4H</button>
+  <button class="tfb" data-tf="1day"  onclick="chTF(this)">1D</button>
+  <button class="tfb" data-tf="1week" onclick="chTF(this)">1W</button>
+  <button class="tfb" data-tf="1month" onclick="chTF(this)">1M</button>
+  <div class="tsep"></div>
+  <button class="toolb on" id="wavBtn" onclick="togWave()">~ ELLIOTT WAVE</button>
+  <button class="toolb"    id="fibBtn" onclick="togFib()">| FIBONACCI</button>
+  <span id="rlbl"></span>
+ </div>
+
+ <div id="main">
+  <div id="chartWrap">
+   <div id="chartDiv"></div>
+   <canvas id="overlayCanvas"></canvas>
+   <div id="hoverBox">
+    <div style="display:flex;gap:10px;font-size:11px">
+     <span style="color:#5a6475">O</span><span id="xO">-</span>
+     <span style="color:#5a6475">H</span><span style="color:#26a69a" id="xH">-</span>
+     <span style="color:#5a6475">L</span><span style="color:#ef5350" id="xL">-</span>
+     <span style="color:#5a6475">C</span><span style="color:#f5c842" id="xC">-</span>
+    </div>
+   </div>
+  </div>
+  <div id="sidePanel">
+   <div id="panelHead">
+    <div><div class="ptitle">ELLIOTT WAVE AI</div><div class="psub" id="ptime">-</div></div>
+    <div class="pbadge bull" id="pbadge">BULL</div>
+   </div>
+   <div id="panelBody"></div>
+  </div>
+ </div>
+
+ <div id="statusbar">
+  <div class="si"><div class="sd g"></div>Chart</div>
+  <div class="si"><div class="sd y"></div>Elliott AI</div>
+  <div class="si" id="ccount">Candles: -</div>
+  <div class="sml" id="stime">-</div>
+ </div>
+</div>
+
+<script>
+'use strict';
+
+// ── CONFIG ──────────────────────────────────────────────────────────
+const TF_SECS  = {'1min':60,'5min':300,'15min':900,'30min':1800,'1h':3600,'4h':14400,'1day':86400,'1week':604800,'1month':2592000};
+const TF_LABEL = {'1min':'1M','5min':'5M','15min':'15M','30min':'30M','1h':'1H','4h':'4H','1day':'D','1week':'W','1month':'M'};
+const TF_LB    = {'1min':3,'5min':4,'15min':5,'30min':5,'1h':5,'4h':7,'1day':8,'1week':10,'1month':10};
+
+// ── GLOBAL STATE ─────────────────────────────────────────────────────
+// Single source of truth - avoids the "provType gets overwritten" bug
+var MODE    = 'sim';   // 'sim' | 'td' | 'ga'  — set ONLY in useSim()/connect()
+var API_KEY = '';
+var CUR_TF  = '4h';
+var SHOW_WAVE = true;
+var SHOW_FIB  = false;
+var SIM_PRICE = 3065;
+var SIM_MOM   = 0;
+var CANDLES   = {};    // tf -> array
+var ALL_ANA   = {};    // tf -> ewResult
+var WPTS      = [];    // wave overlay points
+var FEED_TMR  = null;
+
+// chart objects
+var chart, cSeries, vSeries;
+
+// ── MODAL PROVIDER INFO ─────────────────────────────────────────────
+var PINFO = {
+  td: '<b>Twelve Data</b> &mdash; full OHLCV candlestick history + live XAU/USD price.<ul>' +
+      '<li>Go to <a href="https://twelvedata.com/register" target="_blank">twelvedata.com/register</a> &mdash; sign up free</li>' +
+      '<li>Open your dashboard and copy the <b>API Key</b></li>' +
+      '<li>Free tier: 800 credits/day, up to 5,000 candles, all timeframes</li>' +
+      '<li>Live price polls every 10 seconds via /price endpoint</li></ul>',
+  ga: '<b>GoldAPI.io</b> &mdash; live gold spot price only (no OHLCV history).<ul>' +
+      '<li>Go to <a href="https://www.goldapi.io/" target="_blank">goldapi.io</a> &mdash; register free</li>' +
+      '<li>Copy your <b>x-access-token</b></li>' +
+      '<li>Free tier: 100 req/month &middot; chart history uses simulation</li></ul>',
+  sim: '<b>Simulation Mode</b> &mdash; realistic gold price engine, no API key needed.<br><br>' +
+       'Prices use mean-reversion + momentum + cycle dynamics tuned to real gold behavior.<br>' +
+       '<span style="color:#f5c842">Not real market data &mdash; for demo purposes only.</span>'
+};
+
+function switchTab(p) {
+  document.querySelectorAll('.ptab').forEach(function(b){ b.classList.remove('sel'); });
+  document.getElementById('tab-'+p).classList.add('sel');
+  document.getElementById('pinfo').innerHTML = PINFO[p];
+  document.getElementById('keyRow').style.display = (p === 'sim') ? 'none' : 'block';
+  document.getElementById('keyInput').placeholder = (p === 'td')
+    ? 'Paste your Twelve Data API key...'
+    : 'Paste your GoldAPI x-access-token...';
+  document.getElementById('connBtn').textContent = (p === 'sim') ? 'Use Simulation' : 'Connect Live';
+  document.getElementById('merr').textContent = '';
+  document.getElementById('progWrap').style.display = 'none';
+  document.getElementById('progBar').style.width = '0';
+}
+
+function getActiveTab() {
+  if (document.getElementById('tab-td').classList.contains('sel'))  return 'td';
+  if (document.getElementById('tab-ga').classList.contains('sel'))  return 'ga';
+  return 'sim';
+}
+
+// ── USE SIMULATION ──────────────────────────────────────────────────
+function useSim() {
+  MODE    = 'sim';
+  API_KEY = '';
+  document.getElementById('modal').classList.add('hide');
+  setDot('sim', 'SIMULATION');
+  loadTF(CUR_TF);
+  startFeed();
+}
+
+// ── CONNECT LIVE ────────────────────────────────────────────────────
+async function connect() {
+  var prov = getActiveTab();
+  if (prov === 'sim') { useSim(); return; }
+
+  var key = document.getElementById('keyInput').value.trim();
+  if (!key) {
+    document.getElementById('merr').textContent = 'Please paste your API key above.';
+    return;
+  }
+
+  // Lock button and show progress
+  var btn = document.getElementById('connBtn');
+  btn.disabled = true;
+  btn.textContent = 'Connecting...';
+  document.getElementById('merr').textContent = '';
+  document.getElementById('progWrap').style.display = 'block';
+  setProgress(20);
+
+  // Set state BEFORE fetching
+  MODE    = prov;
+  API_KEY = key;
+
+  // Fetch actual chart data — this IS the validation
+  var data = null;
+  if (prov === 'td') {
+    btn.textContent = 'Fetching XAU/USD data...';
+    setProgress(40);
+    data = await fetchTwelveData(CUR_TF);
+  } else if (prov === 'ga') {
+    // GoldAPI: use sim history + live spot
+    data = genSim(CUR_TF);
+    var spot = await fetchGoldAPI();
+    if (spot) { data[data.length-1].close = spot; SIM_PRICE = spot; }
+  }
+
+  setProgress(80);
+
+  if (!data || !data.length) {
+    // fetchTwelveData already set the error message
+    MODE    = 'sim';
+    API_KEY = '';
+    btn.disabled = false;
+    btn.textContent = 'Connect Live';
+    document.getElementById('progWrap').style.display = 'none';
+    return;
+  }
+
+  // Success
+  setProgress(100);
+  setTimeout(function() {
+    document.getElementById('progWrap').style.display = 'none';
+    document.getElementById('progBar').style.width = '0';
+  }, 400);
+
+  document.getElementById('modal').classList.add('hide');
+  setDot('live', prov === 'td' ? 'TWELVE DATA' : 'GOLDAPI.IO');
+  showToast('Connected! Loaded ' + data.length + ' candles', 'ok');
+
+  CANDLES[CUR_TF] = data;
+  renderChart(data);
+  doEW(data, CUR_TF);
+  buildAllAna();
+  drawOverlays();
+  startFeed();
+}
+
+function setProgress(pct) {
+  document.getElementById('progBar').style.width = pct + '%';
+}
+
+function setApiError(msg) {
+  document.getElementById('merr').textContent = msg;
+  var btn = document.getElementById('connBtn');
+  btn.disabled = false;
+  btn.textContent = 'Connect Live';
+}
+
+// ── CHART INIT ──────────────────────────────────────────────────────
+function initChart() {
+  var wrap      = document.getElementById('chartWrap');
+  var container = document.getElementById('chartDiv');
+
+  // Read actual pixel dimensions from the flex-sized parent
+  var W = wrap.clientWidth  || 800;
+  var H = wrap.clientHeight || 500;
+
+  chart = LightweightCharts.createChart(container, {
+    width:  W,
+    height: H,
+    layout: {
+      background: { color: '#0a0b0e' },
+      textColor:  '#5a6475',
+      fontFamily: "'Space Mono',monospace",
+      fontSize:   10,
+    },
+    grid: {
+      vertLines: { color: '#0f1117' },
+      horzLines: { color: '#131722' },
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+      vertLine: { color: '#2d3347', labelBackgroundColor: '#0f1117' },
+      horzLine: { color: '#2d3347', labelBackgroundColor: '#0f1117' },
+    },
+    rightPriceScale: { borderColor: '#1e2433', textColor: '#5a6475' },
+    timeScale: {
+      borderColor:   '#1e2433',
+      textColor:     '#5a6475',
+      timeVisible:   true,
+      secondsVisible: false,
+    },
+  });
+
+  cSeries = chart.addCandlestickSeries({
+    upColor: '#26a69a', downColor: '#ef5350',
+    borderUpColor: '#26a69a', borderDownColor: '#ef5350',
+    wickUpColor:   '#26a69a', wickDownColor:   '#ef5350',
+  });
+
+  vSeries = chart.addHistogramSeries({
+    priceFormat:  { type: 'volume' },
+    priceScaleId: 'vol',
+  });
+  chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.87, bottom: 0 } });
+
+  chart.subscribeCrosshairMove(function(p) {
+    var box = document.getElementById('hoverBox');
+    if (!p || !p.seriesData) { box.style.display='none'; return; }
+    var d = p.seriesData.get(cSeries);
+    if (!d) { box.style.display='none'; return; }
+    box.style.display = 'block';
+    document.getElementById('xO').textContent = d.open.toFixed(2);
+    document.getElementById('xH').textContent = d.high.toFixed(2);
+    document.getElementById('xL').textContent = d.low.toFixed(2);
+    document.getElementById('xC').textContent = d.close.toFixed(2);
+    setOHLC(d);
+  });
+
+  chart.timeScale().subscribeVisibleTimeRangeChange(drawOverlays);
+
+  // Resize both chart and overlay canvas when the container changes size
+  var cnv = document.getElementById('overlayCanvas');
+  // Set initial canvas size
+  cnv.width  = W;
+  cnv.height = H;
+  new ResizeObserver(function() {
+    var W2 = wrap.clientWidth;
+    var H2 = wrap.clientHeight;
+    if (W2 > 0 && H2 > 0) {
+      chart.resize(W2, H2);   // chart.resize() is the correct LW API call
+      cnv.width  = W2;
+      cnv.height = H2;
+      drawOverlays();
+    }
+  }).observe(wrap);
+}
+
+// ── RENDER CHART DATA ───────────────────────────────────────────────
+function renderChart(data) {
+  cSeries.setData(data.map(function(d) {
+    return { time: d.time, open: d.open, high: d.high, low: d.low, close: d.close };
+  }));
+  vSeries.setData(data.map(function(d) {
+    return {
+      time:  d.time,
+      value: d.volume || 0,
+      color: d.close >= d.open ? 'rgba(38,166,154,.28)' : 'rgba(239,83,80,.28)'
+    };
+  }));
+  chart.timeScale().fitContent();
+
+  var last = data[data.length-1];
+  var prev = data[data.length-2] || last;
+  SIM_PRICE = last.close;
+  updateTicker(last.close, prev.close);
+  setOHLC(last);
+  document.getElementById('ccount').textContent = 'Candles: ' + data.length;
+  document.getElementById('rlbl').textContent   = 'Refreshed ' + new Date().toLocaleTimeString();
+  document.getElementById('stime').textContent  = new Date().toLocaleString();
+}
+
+// ── LOAD TIMEFRAME ──────────────────────────────────────────────────
+async function loadTF(tf) {
+  CUR_TF = tf;
+  var data;
+  if (MODE === 'td') {
+    data = await fetchTwelveData(tf);
+    if (!data) data = genSim(tf);
+  } else if (MODE === 'ga') {
+    data = genSim(tf);
+    var spot = await fetchGoldAPI();
+    if (spot) { data[data.length-1].close = spot; SIM_PRICE = spot; }
+  } else {
+    data = genSim(tf);
+  }
+  CANDLES[tf] = data;
+  renderChart(data);
+  doEW(data, tf);
+  buildAllAna();
+  drawOverlays();
+}
+
+// ── TWELVE DATA API ─────────────────────────────────────────────────
+// Endpoint: /time_series
+// XAU/USD datetime comes back as "YYYY-MM-DD HH:MM:SS" in UTC
+// Must parse as UTC: append 'T' and 'Z' before passing to new Date()
+async function fetchTwelveData(tf) {
+  var url = 'https://api.twelvedata.com/time_series'
+    + '?symbol=XAU%2FUSD'
+    + '&interval=' + tf
+    + '&outputsize=500'
+    + '&timezone=UTC'
+    + '&order=ASC'
+    + '&apikey=' + API_KEY;
+
+  // 20-second timeout — avoids hanging forever on slow connections
+  var controller = new AbortController();
+  var timer = setTimeout(function(){ controller.abort(); }, 20000);
+
+  var resp, json;
+  try {
+    resp = await fetch(url, { signal: controller.signal });
+    json = await resp.json();
+    clearTimeout(timer);
+  } catch(e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') {
+      setApiError('Request timed out (20s). Check your internet connection.');
+    } else {
+      setApiError('Network error: ' + e.message);
+    }
+    return null;
+  }
+
+  // Twelve Data wraps API errors in json.status === 'error'
+  if (json.status === 'error') {
+    setApiError('Twelve Data error: ' + (json.message || json.code || 'unknown error'));
+    return null;
+  }
+
+  // Also possible: rate limit returns a plain message object
+  if (!json.values) {
+    setApiError('No data returned. Check your key has XAU/USD access.');
+    return null;
+  }
+
+  if (!json.values.length) {
+    setApiError('Empty response for interval: ' + tf);
+    return null;
+  }
+
+  // Parse — datetime is "2024-01-15 09:00:00" (UTC for forex)
+  // Replace space with T, add Z to force UTC in all browsers
+  var seen = {};
+  var out  = [];
+  for (var i = 0; i < json.values.length; i++) {
+    var v   = json.values[i];
+    var iso = v.datetime.replace(' ', 'T') + 'Z';
+    var ts  = Math.floor(new Date(iso).getTime() / 1000);
+    var o = parseFloat(v.open);
+    var h = parseFloat(v.high);
+    var l = parseFloat(v.low);
+    var c = parseFloat(v.close);
+    if (!isFinite(ts) || !isFinite(o) || seen[ts]) continue;
+    seen[ts] = true;
+    out.push({ time: ts, open: o, high: h, low: l, close: c, volume: parseFloat(v.volume) || 0 });
+  }
+
+  // Already ordered ASC from API but sort defensively
+  out.sort(function(a,b){ return a.time - b.time; });
+
+  if (!out.length) {
+    setApiError('Could not parse Twelve Data response.');
+    return null;
+  }
+
+  return out;
+}
+
+// ── GOLDAPI ─────────────────────────────────────────────────────────
+async function fetchGoldAPI() {
+  try {
+    var r = await fetch('https://www.goldapi.io/api/XAU/USD', {
+      headers: { 'x-access-token': API_KEY }
+    });
+    var d = await r.json();
+    return d.price || null;
+  } catch(e) { return null; }
+}
+
+// ── LIVE FEED ────────────────────────────────────────────────────────
+function startFeed() {
+  if (FEED_TMR) clearInterval(FEED_TMR);
+
+  if (MODE === 'td') {
+    // Poll /price every 10s (free tier: 1 credit each call)
+    FEED_TMR = setInterval(async function() {
+      try {
+        var r = await fetch('https://api.twelvedata.com/price?symbol=XAU%2FUSD&apikey=' + API_KEY);
+        var d = await r.json();
+        if (d.price) onTick(parseFloat(d.price));
+      } catch(e) {}
+    }, 10000);
+    // Full OHLCV refresh every 5 min
+    setInterval(function(){ loadTF(CUR_TF); }, 300000);
+    return;
+  }
+
+  if (MODE === 'ga') {
+    FEED_TMR = setInterval(async function() {
+      var p = await fetchGoldAPI();
+      if (p) onTick(p);
+    }, 8000);
+    return;
+  }
+
+  // Simulation tick every 1.5s
+  FEED_TMR = setInterval(simTick, 1500);
+}
+
+function simTick() {
+  var n = (Math.random() - 0.49) * SIM_PRICE * 0.00032;
+  SIM_MOM   = SIM_MOM * 0.92 + n * 0.08;
+  SIM_PRICE = Math.max(2400, Math.min(3600, SIM_PRICE + SIM_MOM + n));
+  onTick(SIM_PRICE);
+}
+
+function onTick(price) {
+  var data = CANDLES[CUR_TF];
+  if (!data || !data.length) return;
+  var sec  = TF_SECS[CUR_TF] || 3600;
+  var now  = Math.floor(Date.now() / 1000);
+  var barT = Math.floor(now / sec) * sec;
+  var last = data[data.length-1];
+  var prev = data[data.length-2] || last;
+
+  if (barT > last.time) {
+    data.push({ time: barT, open: price, high: price, low: price, close: price, volume: 0 });
+    if (data.length > 5000) data.shift();
+  } else {
+    last.close  = price;
+    last.high   = Math.max(last.high, price);
+    last.low    = Math.min(last.low,  price);
+    last.volume = (last.volume || 0) + Math.floor(Math.random() * 8);
+  }
+
+  var bar = data[data.length-1];
+  try {
+    cSeries.update({ time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close });
+    vSeries.update({ time: bar.time, value: bar.volume, color: bar.close >= bar.open ? 'rgba(38,166,154,.28)' : 'rgba(239,83,80,.28)' });
+  } catch(e) {}
+
+  updateTicker(price, prev.close || bar.open);
+  setOHLC(bar);
+  drawOverlays();
+}
+
+// ── UI HELPERS ───────────────────────────────────────────────────────
+function setDot(mode, label) {
+  document.getElementById('ldot').className = 'dot ' + mode;
+  var l = document.getElementById('llbl');
+  l.textContent = label;
+  l.style.color = mode === 'live' ? '#26a69a' : mode === 'sim' ? '#f5c842' : '#ef5350';
+}
+
+function updateTicker(price, prev) {
+  var el  = document.getElementById('pnum');
+  var chg = prev ? ((price - prev) / prev * 100) : 0;
+  el.textContent = price.toFixed(2);
+  el.className = 'up' ? (chg >= 0 ? 'up' : 'dn') : '';
+  el.className = chg >= 0 ? 'up' : 'dn';
+  setTimeout(function(){ el.className = ''; }, 320);
+  var ce = document.getElementById('pchg');
+  ce.textContent = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+  ce.className = 'up' ? (chg >= 0 ? 'up' : 'dn') : '';
+  ce.className = chg >= 0 ? 'up' : 'dn';
+}
+
+function setOHLC(d) {
+  document.getElementById('oO').textContent = d.open  ? d.open.toFixed(2)  : '-';
+  document.getElementById('oH').textContent = d.high  ? d.high.toFixed(2)  : '-';
+  document.getElementById('oL').textContent = d.low   ? d.low.toFixed(2)   : '-';
+  document.getElementById('oC').textContent = d.close ? d.close.toFixed(2) : '-';
+}
+
+var toastTmr;
+function showToast(msg, type) {
+  var el = document.getElementById('toast');
+  clearTimeout(toastTmr);
+  el.textContent = msg;
+  el.className = 'show' + (type ? ' ' + type : '');
+  toastTmr = setTimeout(function(){ el.className = ''; }, 4000);
+}
+
+// ── SIMULATION DATA ──────────────────────────────────────────────────
+function genSim(tf) {
+  var BARS = tf === '1month' ? 60 : tf === '1week' ? 120 : 200;
+  var SEC  = TF_SECS[tf] || 3600;
+  var NOW  = Math.floor(Date.now() / 1000);
+  var price = 2950 + Math.random() * 200;
+  var mom   = 0;
+  var vol   = price * 0.001 * Math.sqrt(SEC / 3600);
+  var out   = [];
+
+  for (var i = 0; i < BARS; i++) {
+    var t  = NOW - (BARS - i) * SEC;
+    var mr = (3065 - price) * 0.00008;
+    var rn = (Math.random() - 0.5) * 2 * vol;
+    var c1 = Math.sin(i * 0.08)  * vol * 0.3;
+    var c2 = Math.sin(i * 0.031) * vol * 0.6;
+    mom   = mom * 0.94 + rn * 0.06;
+    price = Math.max(2400, Math.min(3600, price + mr + mom + rn + c1 + c2));
+
+    var sp = vol * (0.4 + Math.random() * 1.2);
+    var rO = price + (Math.random() - 0.5) * sp * 0.35;
+    var rC = price + (Math.random() - 0.5) * sp * 0.65;
+    var rH = Math.max(rO, rC) + Math.random() * sp * 0.4;
+    var rL = Math.min(rO, rC) - Math.random() * sp * 0.4;
+    var o  = +rO.toFixed(2), c = +rC.toFixed(2);
+
+    out.push({
+      time:   t,
+      open:   o,
+      high:   +Math.max(rH, o, c).toFixed(2),
+      low:    +Math.min(rL, o, c).toFixed(2),
+      close:  c,
+      volume: Math.floor(300 + Math.random() * 4000)
+    });
+  }
+  return out;
+}
+
+// ── ELLIOTT WAVE ENGINE ──────────────────────────────────────────────
+function findPivots(data, lb) {
+  var out = [];
+  for (var i = lb; i < data.length - lb; i++) {
+    var isH = true, isL = true;
+    for (var j = i - lb; j <= i + lb; j++) {
+      if (j === i) continue;
+      if (data[j].high >= data[i].high) isH = false;
+      if (data[j].low  <= data[i].low)  isL = false;
+    }
+    if (isH) out.push({ index: i, price: data[i].high, time: data[i].time, type: 'H' });
+    if (isL) out.push({ index: i, price: data[i].low,  time: data[i].time, type: 'L' });
+  }
+  return out.sort(function(a,b){ return a.index - b.index; });
+}
+
+function altPivots(ps) {
+  if (!ps.length) return [];
+  var out = [ps[0]];
+  for (var i = 1; i < ps.length; i++) {
+    var last = out[out.length-1];
+    if (last.type !== ps[i].type) {
+      out.push(ps[i]);
+    } else {
+      if (last.type === 'H' && ps[i].price > last.price) out[out.length-1] = ps[i];
+      if (last.type === 'L' && ps[i].price < last.price) out[out.length-1] = ps[i];
+    }
+  }
+  return out;
+}
+
+function ewAnalyze(data, lb) {
+  if (!data || data.length < 20) return null;
+  var ps  = findPivots(data, lb);
+  if (ps.length < 5) return null;
+  var alt = altPivots(ps.slice(-14));
+  if (alt.length < 3) return null;
+  var bull = alt[alt.length-1].price > alt[0].price;
+  var sc = 0;
+  if (alt.length >= 5) {
+    var w1 = Math.abs(alt[1].price - alt[0].price);
+    var w2 = Math.abs(alt[2].price - alt[1].price);
+    var w3 = alt[3] ? Math.abs(alt[3].price - alt[2].price) : 0;
+    var w4 = alt[4] ? Math.abs(alt[4].price - alt[3].price) : 0;
+    if (w2 < w1) sc++;
+    if (w3 > w1 && w3 > w2) sc++;
+    if (w4 < w3) sc++;
+    var noOv = bull
+      ? ((alt[3] ? alt[3].price : 0) > (alt[1] ? alt[1].price : 0))
+      : ((alt[3] ? alt[3].price : 1e9) < (alt[1] ? alt[1].price : 1e9));
+    if (noOv) sc++;
+  }
+  var wn = Math.min(alt.length, 5);
+  var cw = (wn >= 5) ? (alt.length >= 7 ? 'C' : '5') : String(wn);
+  var fib = {};
+  if (alt.length >= 3) {
+    var b = Math.abs(alt[1].price - alt[0].price) || 1;
+    fib.w2r = ((Math.abs(alt[2].price - alt[1].price) / b) * 100).toFixed(0);
+    if (alt[3]) fib.w3e = ((Math.abs(alt[3].price - alt[2].price) / b) * 100).toFixed(0);
+  }
+  return { bull: bull, waves: alt.slice(0,5), cw: cw, conf: (sc/4)*100, fib: fib };
+}
+
+function doEW(data, tf) {
+  var ana = ewAnalyze(data, TF_LB[tf] || 5);
+  WPTS = ana ? ana.waves : [];
+  renderPanel(ana, tf);
+  var b = document.getElementById('pbadge');
+  b.textContent = ana && ana.bull ? 'BULL' : 'BEAR';
+  b.className   = 'pbadge ' + (ana && ana.bull ? 'bull' : 'bear');
+}
+
+function buildAllAna() {
+  var tfs = Object.keys(TF_LB);
+  for (var i = 0; i < tfs.length; i++) {
+    var tf = tfs[i];
+    if (!CANDLES[tf]) CANDLES[tf] = genSim(tf);
+    ALL_ANA[tf] = ewAnalyze(CANDLES[tf], TF_LB[tf]);
+  }
+}
+
+// ── PANEL RENDER ─────────────────────────────────────────────────────
+var SIGS = {
+  '1': { b:'Wave 1 Impulse - Trend start. Small position; confirm breakout.',    r:'Wave 1 Decline - Early bearish impulse forming.' },
+  '2': { b:'BUY ZONE - W2 retracement. Prime entry. Stop below W1 low.',          r:'W2 Bounce - Dead-cat. Fade the rally.' },
+  '3': { b:'STRONG BUY - W3 in play. 161.8% extension target. Add longs.',        r:'STRONG SELL - W3 down. Hardest momentum move.' },
+  '4': { b:'HOLD - W4 consolidation. No overlap W1. Await W5 breakout.',          r:'W4 Pullback - Pause. Wait for W5 continuation.' },
+  '5': { b:'SCALE OUT - W5 final push. Divergence likely. ABC incoming.',          r:'W5 Final Sell-off. Watch divergence, cover shorts.' },
+  'A': { b:'W-A Correction - First corrective leg.',                               r:'W-A Leg Down - ABC correction in progress.' },
+  'B': { b:'W-B Fake Rally - Counter-trend only. Short the top.',                  r:'W-B Bounce - Do not chase.' },
+  'C': { b:'W-C Near End - Correction finishing. Prepare fresh longs.',            r:'W-C Completing - New impulse cycle approaching.' }
+};
+
+function getSig(cw, bull) {
+  var s = SIGS[String(cw)];
+  return s ? (bull ? s.b : s.r) : 'Pattern forming - monitoring structure.';
+}
+
+function renderWavePos(cw) {
+  var inABC = (cw === 'A' || cw === 'B' || cw === 'C');
+  var seq   = inABC ? ['A','B','C'] : ['1','2','3','4','5'];
+  var idx   = seq.indexOf(String(cw));
+  var h = '<div class="wpos">';
+  for (var i = 0; i < seq.length; i++) {
+    var done   = i < idx;
+    var active = i === idx;
+    h += '<div class="wstep"><div class="wcirc ' + (active ? 'on' : done ? 'done' : '') + '">' + seq[i] + '</div>';
+    h += '<div class="wlb">' + (done ? '&check;' : active ? '&#9658;' : '') + '</div></div>';
+    if (i < seq.length-1) h += '<div class="wline ' + (done ? 'done' : '') + '"></div>';
+  }
+  return h + '</div>';
+}
+
+function renderPanel(activeAna, activeTF) {
+  var order = ['1month','1week','1day','4h','1h','30min','15min','5min','1min'];
+  var html  = '';
+  for (var i = 0; i < order.length; i++) {
+    var tf   = order[i];
+    var isA  = (tf === activeTF);
+    var ana  = isA ? activeAna : ALL_ANA[tf];
+    if (!ana) continue;
+    var bull = ana.bull, cw = ana.cw, conf = ana.conf;
+    var col  = conf > 70 ? '#26a69a' : conf > 40 ? '#f5c842' : '#ef5350';
+    var fibT = ana.fib && ana.fib.w2r ? 'W2: '+ana.fib.w2r+'%'+(ana.fib.w3e ? ' &middot; W3: '+ana.fib.w3e+'%' : '') : '';
+    var fib2 = Math.min(100, conf+12);
+
+    html += '<div class="tfsec">'
+      + '<div class="tfhd" onclick="this.nextSibling.style.display=this.nextSibling.style.display===\'none\'?\'block\':\'none\'">'
+      + '<span class="tflbl">' + (TF_LABEL[tf]||tf) + (isA ? ' &#9679;' : '') + '</span>'
+      + '<span class="pbadge ' + (bull?'bull':'bear') + '" style="font-size:9px">W' + cw + '</span>'
+      + '</div>'
+      + '<div class="tfbd" ' + (isA ? '' : 'style="display:none"') + '>'
+      + renderWavePos(cw)
+      + '<div class="accbox"><div class="acct">EW Compliance</div>'
+      + '<div class="accrow"><span class="accl">Structure</span><div class="accbar"><div class="accf" style="width:'+conf+'%;background:'+col+'"></div></div><span class="accv">'+conf.toFixed(0)+'%</span></div>'
+      + '<div class="accrow"><span class="accl">Fibonacci</span><div class="accbar"><div class="accf" style="width:'+fib2+'%;background:#4fc3f7"></div></div><span class="accv">'+fib2.toFixed(0)+'%</span></div>'
+      + (fibT ? '<div style="font-size:9px;color:#5a6475;margin-top:3px">'+fibT+'</div>' : '')
+      + '</div>'
+      + '<div class="sigbox ' + (bull?'bull':'bear') + '">' + getSig(cw,bull) + '</div>'
+      + '</div></div>';
+  }
+
+  document.getElementById('panelBody').innerHTML = html;
+  document.getElementById('ptime').textContent = 'Updated ' + new Date().toLocaleTimeString();
+}
+
+// ── OVERLAYS ─────────────────────────────────────────────────────────
+function drawOverlays() {
+  var cnv = document.getElementById('overlayCanvas');
+  var ctx = cnv.getContext('2d');
+  ctx.clearRect(0, 0, cnv.width, cnv.height);
+  if (SHOW_WAVE && WPTS.length >= 2) drawWave(ctx, cnv);
+  if (SHOW_FIB)  drawFibs(ctx, cnv);
+}
+
+function drawWave(ctx, cnv) {
+  var ts  = chart.timeScale();
+  var toY = cSeries.priceToCoordinate.bind(cSeries);
+  var pts = [];
+  for (var i = 0; i < WPTS.length; i++) {
+    try {
+      var x = ts.timeToCoordinate(WPTS[i].time);
+      var y = toY(WPTS[i].price);
+      if (x !== null && y !== null) pts.push({ x:x, y:y, idx:i+1, type:WPTS[i].type, price:WPTS[i].price });
+    } catch(e) {}
+  }
+  if (pts.length < 2) return;
+
+  var g = ctx.createLinearGradient(pts[0].x, 0, pts[pts.length-1].x, 0);
+  g.addColorStop(0, 'rgba(79,195,247,.4)');
+  g.addColorStop(1, 'rgba(245,200,66,.5)');
+  ctx.save();
+  ctx.setLineDash([5,4]);
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = g;
+  ctx.beginPath();
+  for (var i = 0; i < pts.length; i++) {
+    if (i===0) ctx.moveTo(pts[i].x, pts[i].y);
+    else       ctx.lineTo(pts[i].x, pts[i].y);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  for (var i = 0; i < pts.length; i++) {
+    var p = pts[i];
+    var last = (i === pts.length-1);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 11, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(10,11,14,.9)'; ctx.fill();
+    ctx.strokeStyle = last ? '#f5c842' : '#4fc3f7';
+    ctx.lineWidth = last ? 2 : 1.5; ctx.stroke();
+    ctx.fillStyle = last ? '#f5c842' : '#4fc3f7';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(p.idx), p.x, p.y);
+    ctx.font = '9px monospace';
+    ctx.fillStyle = 'rgba(232,236,240,.55)';
+    ctx.fillText(p.price.toFixed(1), p.x, p.y + (p.type === 'H' ? -22 : 22));
+  }
+}
+
+function drawFibs(ctx, cnv) {
+  var data = CANDLES[CUR_TF];
+  if (!data || !data.length) return;
+  var sl  = data.slice(-80);
+  var hi  = -Infinity, lo = Infinity;
+  for (var i=0;i<sl.length;i++){if(sl[i].high>hi)hi=sl[i].high;if(sl[i].low<lo)lo=sl[i].low;}
+  var rng = hi - lo;
+  var LVL = [0,.236,.382,.5,.618,.786,1];
+  var CLR = ['#4fc3f7','#26a69a','#f5c842','#e8b830','#f5c842','#26a69a','#4fc3f7'];
+  for (var i=0;i<LVL.length;i++) {
+    var price = hi - rng * LVL[i];
+    try {
+      var y = cSeries.priceToCoordinate(price);
+      if (!y) continue;
+      ctx.save(); ctx.setLineDash([3,5]); ctx.lineWidth=1;
+      ctx.strokeStyle = CLR[i]+'55';
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(cnv.width-76,y); ctx.stroke();
+      ctx.restore();
+      ctx.font='9px monospace'; ctx.fillStyle=CLR[i]+'bb'; ctx.textAlign='left';
+      ctx.fillText((LVL[i]*100).toFixed(1)+'%  '+price.toFixed(1), cnv.width-74, y-3);
+    } catch(e){}
+  }
+}
+
+// ── CONTROLS ─────────────────────────────────────────────────────────
+function chTF(btn) {
+  document.querySelectorAll('.tfb').forEach(function(b){ b.classList.remove('on'); });
+  btn.classList.add('on');
+  loadTF(btn.dataset.tf);
+}
+
+function togWave() {
+  SHOW_WAVE = !SHOW_WAVE;
+  document.getElementById('wavBtn').classList.toggle('on', SHOW_WAVE);
+  drawOverlays();
+}
+
+function togFib() {
+  SHOW_FIB = !SHOW_FIB;
+  document.getElementById('fibBtn').classList.toggle('on', SHOW_FIB);
+  drawOverlays();
+}
+
+// ── BOOT ─────────────────────────────────────────────────────────────
+window.addEventListener('load', function() {
+  // 1. Init chart (layout is painted now)
+  initChart();
+
+  // 2. Load simulation data directly — no function calls that could mutate MODE
+  MODE      = 'sim';
+  API_KEY   = '';
+  var data  = genSim(CUR_TF);
+  CANDLES[CUR_TF] = data;
+  SIM_PRICE = data[data.length-1].close;
+  renderChart(data);
+  doEW(data, CUR_TF);
+  buildAllAna();
+  drawOverlays();
+  startFeed();
+
+  // 3. Periodic reanalysis every 30s
+  setInterval(function() {
+    var d = CANDLES[CUR_TF];
+    if (d) doEW(d, CUR_TF);
+    buildAllAna();
+  }, 30000);
+});
+</script>
+</body>
+</html>
